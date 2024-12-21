@@ -1,70 +1,80 @@
-/******************************************************************************
+/*
+ * Audren Backend for MiniAudio (Nintendo Switch) using libnx-audren
+ *
+ * This is an implementation of a backend for the MiniAudio library using the 
+ * Audren audio renderer for the Nintendo Switch. It integrates with the 
+ * libnx-audren library, providing functions for initializing, starting, 
+ * stopping, and managing playback on the Nintendo Switch hardware.
+ * 
+ * The backend implements required functions for the MiniAudio device, 
+ * including device initialization, audio writing, and memory management, 
+ * to allow seamless integration with the MiniAudio API for audio playback 
+ * on the Nintendo Switch.
+ * 
+ * Credit:
+ * - savaughn 2024
+ * - luizpestana 2022
+ * - libnx-audren library by the Nintendo Switch homebrew community.
+ * - MiniAudio library by Jari Komppa (https://miniaud.io/).
+ */
 
-Audren Backend
-
-******************************************************************************/
-#ifndef miniaudio_audren_h
-#define miniaudio_audren_h
+#ifndef MINIAUDIO_AUDREN_H
+#define MINIAUDIO_AUDREN_H
 
 #include <stdio.h>
 #include <malloc.h>
 #include <stdint.h>
 #include <switch.h>
 
-#define LIBNX_AUDREN_BUFFER_COUNT 5
-
+/* Stub implementations for required pthread and sched functions */
 int pthread_attr_setschedpolicy(void *attr, int policy) { return 0; }
 int sched_get_priority_max(int policy) { return 0; }
 int sched_get_priority_min(int policy) { return 0; }
 
-static const AudioRendererConfig audio_renderer_config =
-{
-    .output_rate     = AudioRendererOutputRate_48kHz,
-    .num_voices      = 24,
-    .num_effects     = 0,
-    .num_sinks       = 1,
-    .num_mix_objs    = 1,
+/* Audio Renderer Configuration */
+static const AudioRendererConfig audio_renderer_config = {
+    .output_rate = AudioRendererOutputRate_48kHz,
+    .num_voices = 24,
+    .num_effects = 0,
+    .num_sinks = 1,
+    .num_mix_objs = 1,
     .num_mix_buffers = 2,
 };
 
-static const int sample_rate           = 48000;
-static const int num_channels          = 2;
-static const uint8_t sink_channels[]   = { 0, 1 };
+/* Audio Configuration Constants */
+static const int sample_rate = 48000;
+static const int num_channels = 2;
+static const uint8_t sink_channels[] = {0, 1};
+static const int LIBNX_AUDREN_BUFFER_COUNT = 5;
 
+/* Audren Backend Structure */
 typedef struct
 {
     AudioDriver drv;
-    char* mempool;
+    char *mempool;
     AudioDriverWaveBuf wavebufs[LIBNX_AUDREN_BUFFER_COUNT];
-    AudioDriverWaveBuf* current_wavebuf;
-    char* current_pool_ptr;
+    AudioDriverWaveBuf *current_wavebuf;
+    char *current_pool_ptr;
     size_t current_size;
     size_t buffer_size;
     size_t samples;
     Mutex update_lock;
 } libnx_audren_t;
 
-static ssize_t libnx_audren_audio_get_free_wavebuf_idx(libnx_audren_t* aud)
-{
-    unsigned i;
-
-    for (i = 0; i < LIBNX_AUDREN_BUFFER_COUNT; i++)
-    {
-        if (aud->wavebufs[i].state == AudioDriverWaveBufState_Free || aud->wavebufs[i].state == AudioDriverWaveBufState_Done)
-            return i;
-    }
-
-    return -1;
-}
-
-static size_t libnx_audren_audio_append(libnx_audren_t* aud, const char *buf, size_t size)
+/* Helper Function: Append Audio Data */
+static size_t libnx_audren_audio_append(libnx_audren_t *aud, const char *buf, size_t size)
 {
     void *dstbuf = NULL;
-    ssize_t free_idx = -1;
 
     if (!aud->current_wavebuf)
     {
-        free_idx = libnx_audren_audio_get_free_wavebuf_idx(aud);
+        ssize_t free_idx = -1;
+        for (unsigned i = 0; i < LIBNX_AUDREN_BUFFER_COUNT; i++)
+        {
+            if (aud->wavebufs[i].state == AudioDriverWaveBufState_Free ||
+                aud->wavebufs[i].state == AudioDriverWaveBufState_Done)
+                return i;
+        };
         if (free_idx == -1)
             return 0;
 
@@ -101,20 +111,21 @@ static size_t libnx_audren_audio_append(libnx_audren_t* aud, const char *buf, si
     return size;
 }
 
-static ma_result ma_device_write__audren(ma_device* pDevice, const void* pFrames, ma_uint32 frameCount, ma_uint32* pFramesWritten)
+/* MiniAudio Device Functions */
+static ma_result ma_device_write__audren(ma_device *pDevice, const void *pFrames, ma_uint32 frameCount, ma_uint32 *pFramesWritten)
 {
     MA_ASSERT(pDevice != NULL);
     MA_ASSERT(pFrames != NULL);
     MA_ASSERT(pDevice->pContext->pUserData != NULL);
-    libnx_audren_t *aud = (libnx_audren_t*)pDevice->pContext->pUserData;
 
+    libnx_audren_t *aud = (libnx_audren_t *)pDevice->pContext->pUserData;
     if (pFramesWritten != NULL)
         *pFramesWritten = 0;
 
     if (ma_device_get_state(pDevice) != ma_device_state_started)
         return MA_DEVICE_NOT_INITIALIZED;
 
-    char *buf = (char*)pFrames;
+    char *buf = (char *)pFrames;
     size_t size = frameCount * ma_get_bytes_per_frame(pDevice->playback.internalFormat, pDevice->playback.internalChannels);
     size_t written = 0;
 
@@ -134,18 +145,18 @@ static ma_result ma_device_write__audren(ma_device* pDevice, const void* pFrames
         return MA_IO_ERROR;
 
     *pFramesWritten = frameCount;
-
     return MA_SUCCESS;
 }
 
-static ma_result ma_device_init__audren(ma_device* pDevice, const ma_device_config* pConfig, ma_device_descriptor* pDescriptorPlayback, ma_device_descriptor* pDescriptorCapture)
+static ma_result ma_device_init__audren(ma_device *pDevice, const ma_device_config *pConfig, ma_device_descriptor *pDescriptorPlayback, ma_device_descriptor *pDescriptorCapture)
 {
     MA_ASSERT(pDevice != NULL);
     MA_ASSERT(pConfig != NULL);
     MA_ASSERT(pDevice->pContext->pUserData != NULL);
-    libnx_audren_t *aud = (libnx_audren_t*)pDevice->pContext->pUserData;
+    libnx_audren_t *aud = (libnx_audren_t *)pDevice->pContext->pUserData;
 
-    if (pConfig->deviceType == ma_device_type_loopback) {
+    if (pConfig->deviceType == ma_device_type_loopback)
+    {
         return MA_DEVICE_TYPE_NOT_SUPPORTED;
     }
 
@@ -159,14 +170,14 @@ static ma_result ma_device_init__audren(ma_device* pDevice, const ma_device_conf
     aud->samples = (aud->buffer_size / num_channels / sizeof(int16_t));
     aud->current_size = 0;
 
-    size_t mempool_size      = (aud->buffer_size * LIBNX_AUDREN_BUFFER_COUNT + (AUDREN_MEMPOOL_ALIGNMENT-1)) &~ (AUDREN_MEMPOOL_ALIGNMENT-1);
-    aud->mempool      = memalign(AUDREN_MEMPOOL_ALIGNMENT, mempool_size);
+    size_t mempool_size = (aud->buffer_size * LIBNX_AUDREN_BUFFER_COUNT + (AUDREN_MEMPOOL_ALIGNMENT - 1)) & ~(AUDREN_MEMPOOL_ALIGNMENT - 1);
+    aud->mempool = memalign(AUDREN_MEMPOOL_ALIGNMENT, mempool_size);
 
     audrenInitialize(&audio_renderer_config);
     audrvCreate(&aud->drv, &audio_renderer_config, num_channels);
 
     unsigned i;
-    for(i = 0; i < LIBNX_AUDREN_BUFFER_COUNT; i++)
+    for (i = 0; i < LIBNX_AUDREN_BUFFER_COUNT; i++)
     {
         aud->wavebufs[i].data_raw = aud->mempool;
         aud->wavebufs[i].size = mempool_size;
@@ -183,8 +194,8 @@ static ma_result ma_device_init__audren(ma_device* pDevice, const ma_device_conf
     audrvVoiceSetDestinationMix(&aud->drv, 0, AUDREN_FINAL_MIX_ID);
 
     unsigned j;
-    for(i = 0; i < num_channels; i++)
-        for(j = 0; j < num_channels; j++)
+    for (i = 0; i < num_channels; i++)
+        for (j = 0; j < num_channels; j++)
             audrvVoiceSetMixFactor(&aud->drv, 0, i == j ? 1.0f : 0.0f, i, j);
 
     mutexInit(&aud->update_lock);
@@ -192,7 +203,7 @@ static ma_result ma_device_init__audren(ma_device* pDevice, const ma_device_conf
     return MA_SUCCESS;
 }
 
-static ma_result ma_context_get_device_info__audren(ma_context* pContext, ma_device_type deviceType, const ma_device_id* pDeviceID, ma_device_info* pDeviceInfo)
+static ma_result ma_context_get_device_info__audren(ma_context *pContext, ma_device_type deviceType, const ma_device_id *pDeviceID, ma_device_info *pDeviceInfo)
 {
     MA_ASSERT(pContext != NULL);
     MA_ASSERT(deviceType == ma_device_type_playback);
@@ -205,33 +216,33 @@ static ma_result ma_context_get_device_info__audren(ma_context* pContext, ma_dev
     return MA_SUCCESS;
 }
 
-static ma_result ma_device_start__audren(ma_device* pDevice)
+static ma_result ma_device_start__audren(ma_device *pDevice)
 {
     MA_ASSERT(pDevice != NULL);
     MA_ASSERT(pDevice->pContext->pUserData != NULL);
-    libnx_audren_t *aud = (libnx_audren_t*)pDevice->pContext->pUserData;
+    libnx_audren_t *aud = (libnx_audren_t *)pDevice->pContext->pUserData;
 
     audrvVoiceStart(&aud->drv, 0);
 
     return MA_SUCCESS;
 }
 
-static ma_result ma_device_stop__audren(ma_device* pDevice)
+static ma_result ma_device_stop__audren(ma_device *pDevice)
 {
     MA_ASSERT(pDevice != NULL);
     MA_ASSERT(pDevice->pContext->pUserData != NULL);
-    libnx_audren_t *aud = (libnx_audren_t*)pDevice->pContext->pUserData;
+    libnx_audren_t *aud = (libnx_audren_t *)pDevice->pContext->pUserData;
 
     audrvVoiceStop(&aud->drv, 0);
 
     return MA_SUCCESS;
 }
 
-static ma_result ma_device_uninit__audren(ma_device* pDevice)
+static ma_result ma_device_uninit__audren(ma_device *pDevice)
 {
     MA_ASSERT(pDevice != NULL);
     MA_ASSERT(pDevice->pContext->pUserData != NULL);
-    libnx_audren_t *aud = (libnx_audren_t*)pDevice->pContext->pUserData;
+    libnx_audren_t *aud = (libnx_audren_t *)pDevice->pContext->pUserData;
 
     audrvVoiceStop(&aud->drv, 0);
     audrvClose(&aud->drv);
@@ -244,25 +255,25 @@ static ma_result ma_device_uninit__audren(ma_device* pDevice)
     return MA_SUCCESS;
 }
 
-static ma_result ma_context_init__audren(ma_context* pContext, const ma_context_config* pConfig, ma_backend_callbacks* pCallbacks)
+static ma_result ma_context_init__audren(ma_context *pContext, const ma_context_config *pConfig, ma_backend_callbacks *pCallbacks)
 {
     MA_ASSERT(pContext != NULL);
 
-    pContext->pUserData = (libnx_audren_t*)calloc(1, sizeof(libnx_audren_t));
+    pContext->pUserData = (libnx_audren_t *)calloc(1, sizeof(libnx_audren_t));
 
     (void)pConfig; /* Unused. */
 
-    pCallbacks->onContextInit             = ma_context_init__audren;
-    pCallbacks->onContextUninit           = NULL;
+    pCallbacks->onContextInit = ma_context_init__audren;
+    pCallbacks->onContextUninit = NULL;
     pCallbacks->onContextEnumerateDevices = NULL;
-    pCallbacks->onContextGetDeviceInfo    = ma_context_get_device_info__audren;
-    pCallbacks->onDeviceInit              = ma_device_init__audren;
-    pCallbacks->onDeviceUninit            = ma_device_uninit__audren;
-    pCallbacks->onDeviceStart             = ma_device_start__audren;
-    pCallbacks->onDeviceStop              = ma_device_stop__audren;
-    pCallbacks->onDeviceRead              = NULL;
-    pCallbacks->onDeviceWrite             = ma_device_write__audren;
-    pCallbacks->onDeviceDataLoop          = NULL;
+    pCallbacks->onContextGetDeviceInfo = ma_context_get_device_info__audren;
+    pCallbacks->onDeviceInit = ma_device_init__audren;
+    pCallbacks->onDeviceUninit = ma_device_uninit__audren;
+    pCallbacks->onDeviceStart = ma_device_start__audren;
+    pCallbacks->onDeviceStop = ma_device_stop__audren;
+    pCallbacks->onDeviceRead = NULL;
+    pCallbacks->onDeviceWrite = ma_device_write__audren;
+    pCallbacks->onDeviceDataLoop = NULL;
 
     return MA_SUCCESS;
 }

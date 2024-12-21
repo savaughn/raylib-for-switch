@@ -407,36 +407,36 @@ endif
 # Define source code object files required
 #------------------------------------------------------------------------------------------------
 CORE = \
-    core/core_basic_window \
-    core/core_basic_screen_manager \
-    core/core_input_keys \
-    core/core_input_mouse \
-    core/core_input_mouse_wheel \
-    core/core_input_gamepad \
-    core/core_input_multi_gamepad \
-    core/core_input_multitouch \
-    core/core_input_gestures \
-    core/core_2d_camera \
-    core/core_2d_camera_platformer \
-    core/core_2d_camera_mouse_zoom \
-    core/core_3d_camera_mode \
-    core/core_3d_camera_free \
-    core/core_3d_camera_first_person \
-    core/core_3d_picking \
-    core/core_world_screen \
-    core/core_custom_logging \
-    core/core_drop_files \
-    core/core_random_values \
-    core/core_scissor_test \
-    core/core_storage_values \
-    core/core_vr_simulator \
-    core/core_loading_thread \
-    core/core_window_flags \
-    core/core_window_letterbox \
-    core/core_window_should_close \
-    core/core_split_screen \
-    core/core_smooth_pixelperfect \
-    core/core_custom_frame_control
+	core/core_basic_window \
+	core/core_basic_screen_manager \
+	core/core_input_keys \
+	core/core_input_mouse \
+	core/core_input_mouse_wheel \
+	core/core_input_gamepad \
+	core/core_input_multi_gamepad \
+	core/core_input_multitouch \
+	core/core_input_gestures \
+	core/core_2d_camera \
+	core/core_2d_camera_platformer \
+	core/core_2d_camera_mouse_zoom \
+	core/core_3d_camera_mode \
+	core/core_custom_logging \
+	core/core_drop_files \
+	core/core_random_values \
+	core/core_scissor_test \
+	core/core_storage_values \
+	core/core_loading_thread \
+	core/core_window_flags \
+	core/core_window_letterbox \
+	core/core_window_should_close \
+	core/core_smooth_pixelperfect \
+	core/core_custom_frame_control
+# core/core_3d_camera_free \ 
+# core/core_3d_camera_first_person \
+# core/core_3d_picking \
+# 	core/core_world_screen \
+# 	core/core_vr_simulator \
+#	core/core_split_screen \
 
 SHAPES = \
     shapes/shapes_basic_shapes \
@@ -453,8 +453,8 @@ SHAPES = \
     shapes/shapes_easings_rectangle_array \
     shapes/shapes_draw_ring \
     shapes/shapes_draw_circle_sector \
-    shapes/shapes_draw_rectangle_rounded \
     shapes/shapes_top_down_lights
+#     shapes/shapes_draw_rectangle_rounded \
 
 TEXTURES = \
     textures/textures_logo_raylib \
@@ -539,8 +539,8 @@ AUDIO = \
     audio/audio_music_stream \
     audio/audio_raw_stream \
     audio/audio_sound_loading \
-    audio/audio_multichannel_sound \
     audio/audio_stream_effects
+#     audio/audio_multichannel_sound
 
 CURRENT_MAKEFILE = $(lastword $(MAKEFILE_LIST))
 
@@ -557,6 +557,8 @@ models: $(MODELS)
 shaders: $(SHADERS)
 audio: $(AUDIO)
 
+$(shell mkdir -p nros)
+
 # Generic compilation pattern
 # NOTE: Examples must be ready for Android compilation!
 %: %.c
@@ -568,6 +570,7 @@ else ifeq ($(PLATFORM),PLATFORM_NX)
 	$(NM) -CSn $@.elf > $@.lst
 	nacptool --create "$(notdir $@)" "Raylib Example" "1.0.0" $@.nacp
 	elf2nro $@.elf $@.nro --icon=textures/resources/raylib_logo.jpg --nacp=$@.nacp --romfsdir=$(CURDIR)/$(ROMFS)
+	cp $@.nro nros/
 else
 	$(CC) -o $@$(EXT) $< $(CFLAGS) $(INCLUDE_PATHS) $(LDFLAGS) $(LDLIBS) -D$(PLATFORM)
 endif
