@@ -29,6 +29,8 @@
 #         - Linux DRM subsystem (KMS mode)
 #     > PLATFORM_ANDROID:
 #         - Android (ARM, ARM64)
+#     > PLATFORM_NX:
+#         - Switch (LibNX)
 #
 #   Many thanks to Milan Nikolic (@gen2brain) for implementing Android platform pipeline.
 #   Many thanks to Emanuele Petriglia for his contribution on GNU/Linux pipeline.
@@ -177,6 +179,13 @@ ifeq ($(TARGET_PLATFORM),$(filter $(TARGET_PLATFORM),PLATFORM_WEB PLATFORM_WEB_R
         ifndef PLATFORM_SHELL
             PLATFORM_SHELL = sh
         endif
+ifeq ($(TARGET_PLATFORM),PLATFORM_NX)
+    UNAMEOS = $(shell uname)
+    ifeq ($(UNAMEOS),Linux)
+        PLATFORM_OS = LINUX
+    endif
+    RAYLIB_LIBTYPE = STATIC
+endif
     endif
 endif
 
@@ -263,6 +272,9 @@ ifeq ($(TARGET_PLATFORM),PLATFORM_ANDROID)
     # By default use OpenGL ES 2.0 on Android
     GRAPHICS = GRAPHICS_API_OPENGL_ES2
 endif
+ifeq ($(TARGET_PLATFORM),PLATFORM_NX)
+    GRAPHICS = GRAPHICS_API_OPENGL_ES2
+endif
 
 # Define default C compiler and archiver to pack library: CC, AR
 #------------------------------------------------------------------------------------------------
@@ -310,6 +322,12 @@ ifeq ($(TARGET_PLATFORM),PLATFORM_ANDROID)
     # It seems from Android NDK r22 onwards we need to use llvm-ar
     AR = $(ANDROID_TOOLCHAIN)/bin/llvm-ar
 endif
+ifeq ($(TARGET_PLATFORM),PLATFORM_NX)
+    ifeq ($(strip $(DEVKITPRO)),)
+        $(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>/devkitpro")
+    endif
+    include $(DEVKITPRO)/libnx/switch_rules
+endif
 
 # Define compiler flags: CFLAGS
 #------------------------------------------------------------------------------------------------
@@ -354,6 +372,9 @@ ifeq ($(RAYLIB_BUILD_MODE),RELEASE)
         CFLAGS += -O1
     endif
     ifeq ($(TARGET_PLATFORM),PLATFORM_ANDROID)
+        CFLAGS += -O2
+    endif
+    ifeq ($(TARGET_PLATFORM),PLATFORM_NX)
         CFLAGS += -O2
     endif
 endif
@@ -465,6 +486,11 @@ CFLAGS += $(CUSTOM_CFLAGS)
 INCLUDE_PATHS = -I. $(EXTRA_INCLUDE_PATHS)
 
 # Define additional directories containing required header files
+ifeq ($(TARGET_PLATFORM),PLATFORM_NX)
+    LIBDIRS	:= $(PORTLIBS) $(LIBNX)
+    ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIC -ftls-model=local-exec
+    CFLAGS	+=	-ffunction-sections -fdata-sections $(ARCH) $(foreach dir,$(LIBDIRS),-I$(dir)/include) -D__SWITCH__
+endif
 ifeq ($(TARGET_PLATFORM),PLATFORM_DESKTOP_GLFW)
     INCLUDE_PATHS += -Iexternal/glfw/include
     ifeq ($(PLATFORM_OS),BSD)
@@ -647,6 +673,9 @@ ifeq ($(RAYLIB_MODULE_RAYGUI),TRUE)
     OBJS += raygui.o
 endif
 
+ifeq ($(TARGET_PLATFORM),PLATFORM_NX)
+    OBJS += nxusb.o
+endif
 ifeq ($(TARGET_PLATFORM),PLATFORM_ANDROID)
     OBJS += android_native_app_glue.o
 endif
@@ -757,6 +786,10 @@ rmodels.o : rmodels.c raylib.h rlgl.h raymath.h
 raudio.o : raudio.c raylib.h
 	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS)
 
+# Compile switch usb module
+nxusb.o : nxusb.c nxusb.h raylib.h
+	$(CC) -c $< $(CFLAGS) $(INCLUDE_PATHS) -D$(TARGET_PLATFORM)
+
 # Compile raygui module
 # NOTE: raygui header should be distributed with raylib.h
 raygui.o : raygui.c
@@ -784,6 +817,10 @@ android_native_app_glue.o : $(NATIVE_APP_GLUE)/android_native_app_glue.c
 # for compilation and enable runtime linking with -rpath, LD_LIBRARY_PATH, or ldconfig.
 # HINT: Add -L$(RAYLIB_INSTALL_PATH) -I$(RAYLIB_H_INSTALL_PATH) to your own makefiles.
 # See below and ../examples/Makefile for more information.
+
+ifeq ($(TARGET_PLATFORM),PLATFORM_NX)
+    DESTDIR ?= $(PORTLIBS)
+endif
 
 # RAYLIB_INSTALL_PATH should be the desired full path to libraylib. No relative paths.
 DESTDIR ?= /usr/local
